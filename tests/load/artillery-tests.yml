@@ -1,0 +1,480 @@
+# Artillery.io Load Testing Configuration for Selextract Cloud
+# Comprehensive performance testing scenarios for API endpoints, authentication, and system stress testing
+
+config:
+  target: '{{ $processEnvironment.TARGET_URL || "http://localhost:8000" }}'
+  variables:
+    api_base: '/api/v1'
+    frontend_base: '{{ $processEnvironment.FRONTEND_URL || "http://localhost:3000" }}'
+  
+  # Performance testing phases
+  phases:
+    # Warm-up phase
+    - duration: 60
+      arrivalRate: 1
+      name: "Warm-up"
+    
+    # Gradual load increase
+    - duration: 300
+      arrivalRate: 5
+      rampTo: 20
+      name: "Ramp-up"
+    
+    # Sustained load
+    - duration: 600
+      arrivalRate: 20
+      name: "Sustained Load"
+    
+    # Stress testing
+    - duration: 300
+      arrivalRate: 20
+      rampTo: 50
+      name: "Stress Test"
+    
+    # Peak load testing
+    - duration: 180
+      arrivalRate: 50
+      rampTo: 100
+      name: "Peak Load"
+    
+    # Cool-down
+    - duration: 120
+      arrivalRate: 100
+      rampTo: 1
+      name: "Cool-down"
+
+  # Payload definitions for testing
+  payload:
+    path: "tests/load/test-data.csv"
+    fields:
+      - "email"
+      - "password"
+      - "task_name"
+      - "task_url"
+    order: sequence
+    skipHeader: true
+
+  # Performance thresholds and SLAs
+  ensure:
+    p95: 2000  # 95th percentile response time under 2 seconds
+    p99: 5000  # 99th percentile response time under 5 seconds
+    maxErrorRate: 5  # Maximum 5% error rate
+    
+  # HTTP configuration
+  http:
+    timeout: 30
+    pool: 50  # Connection pool size
+    
+  # TLS configuration
+  tls:
+    rejectUnauthorized: false  # For self-signed certificates in testing
+    
+  # Reporting and metrics
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+    publish-metrics:
+      - type: cloudwatch
+        region: us-east-1
+        namespace: Selextract/LoadTesting
+        exclude:
+          - latency.min
+          - latency.max
+          - latency.mean
+    expect:
+      outputFormat: json
+      
+  # Custom processors
+  processor: "tests/load/artillery-processor.js"
+
+# Test scenarios
+scenarios:
+  # Authentication flow testing
+  - name: "Authentication Flow"
+    weight: 20
+    flow:
+      - post:
+          url: "{{ api_base }}/auth/register"
+          headers:
+            Content-Type: "application/json"
+          json:
+            email: "loadtest_{{ $randomString() }}@example.com"
+            password: "LoadTest123!"
+            full_name: "Artillery Load Test User"
+          capture:
+            - json: "$.message"
+              as: "register_message"
+          expect:
+            - statusCode: [201, 409]  # 201 for new user, 409 if exists
+            
+      - post:
+          url: "{{ api_base }}/auth/login"
+          headers:
+            Content-Type: "application/json"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.access_token"
+              as: "access_token"
+            - json: "$.refresh_token"
+              as: "refresh_token"
+          expect:
+            - statusCode: 200
+            - hasProperty: "access_token"
+            
+      - get:
+          url: "{{ api_base }}/auth/me"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: "email"
+            
+      - post:
+          url: "{{ api_base }}/auth/logout"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+
+  # Task management workflow
+  - name: "Task Management Workflow"
+    weight: 40
+    flow:
+      # Authenticate first
+      - post:
+          url: "{{ api_base }}/auth/login"
+          headers:
+            Content-Type: "application/json"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.access_token"
+              as: "access_token"
+          expect:
+            - statusCode: 200
+            
+      # Create task
+      - post:
+          url: "{{ api_base }}/tasks"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+            Content-Type: "application/json"
+          json:
+            name: "{{ task_name }}"
+            url: "{{ task_url }}"
+            selectors:
+              title: ".title, h1, .product-name"
+              price: ".price, .cost, .amount"
+              description: ".description, .details, .info"
+            config:
+              wait_for_selector: true
+              take_screenshot: false
+              user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          capture:
+            - json: "$.id"
+              as: "task_id"
+          expect:
+            - statusCode: 201
+            - hasProperty: "id"
+            
+      # Get task details
+      - get:
+          url: "{{ api_base }}/tasks/{{ task_id }}"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: "status"
+            
+      # List user tasks
+      - get:
+          url: "{{ api_base }}/tasks?limit=20&offset=0"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: "tasks"
+            
+      # Get task results (might be 404 if not completed)
+      - get:
+          url: "{{ api_base }}/tasks/{{ task_id }}/results"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: [200, 404]
+            
+      # Cancel task (30% chance)
+      - function: "maybeCancel"
+      - ifTrue:
+          post:
+            url: "{{ api_base }}/tasks/{{ task_id }}/cancel"
+            headers:
+              Authorization: "Bearer {{ access_token }}"
+            expect:
+              - statusCode: 200
+
+  # Dashboard and analytics
+  - name: "Dashboard Analytics"
+    weight: 15
+    flow:
+      - post:
+          url: "{{ api_base }}/auth/login"
+          headers:
+            Content-Type: "application/json"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.access_token"
+              as: "access_token"
+          expect:
+            - statusCode: 200
+            
+      - get:
+          url: "{{ api_base }}/dashboard/stats"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: "total_tasks"
+            - hasProperty: "compute_units_used"
+            
+      - get:
+          url: "{{ api_base }}/dashboard/recent-tasks?limit=10"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            
+      - get:
+          url: "{{ api_base }}/analytics/usage?period=7days"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            
+      - get:
+          url: "{{ api_base }}/analytics/performance?period=24hours"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+
+  # Billing system stress test
+  - name: "Billing Operations"
+    weight: 15
+    flow:
+      - post:
+          url: "{{ api_base }}/auth/login"
+          headers:
+            Content-Type: "application/json"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.access_token"
+              as: "access_token"
+          expect:
+            - statusCode: 200
+            
+      - get:
+          url: "{{ api_base }}/billing/usage"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: "compute_units_used"
+            - hasProperty: "compute_units_limit"
+            
+      - get:
+          url: "{{ api_base }}/billing/plans"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            
+      - get:
+          url: "{{ api_base }}/billing/history?limit=20"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            
+      - get:
+          url: "{{ api_base }}/billing/subscription"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 200
+            
+      # Simulate plan change (5% chance)
+      - function: "maybePlanChange"
+      - ifTrue:
+          post:
+            url: "{{ api_base }}/billing/change-plan"
+            headers:
+              Authorization: "Bearer {{ access_token }}"
+              Content-Type: "application/json"
+            json:
+              plan_id: "professional"
+            expect:
+              - statusCode: [200, 409]  # 409 if already on plan
+
+  # API health and monitoring
+  - name: "Health Monitoring"
+    weight: 10
+    flow:
+      - get:
+          url: "{{ api_base }}/health"
+          expect:
+            - statusCode: 200
+            - hasProperty: "status"
+            - equals:
+                - "ok"
+                - "{{ status }}"
+                
+      - get:
+          url: "{{ api_base }}/metrics"
+          expect:
+            - statusCode: 200
+            
+      - get:
+          url: "{{ api_base }}/version"
+          expect:
+            - statusCode: 200
+            - hasProperty: "version"
+
+# WebSocket testing for real-time features
+  - name: "WebSocket Connections"
+    weight: 5
+    engine: ws
+    flow:
+      - connect:
+          url: "ws://{{ $target }}/ws/tasks"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          subprotocols:
+            - "selextract-v1"
+            
+      - send:
+          payload: |
+            {
+              "type": "subscribe",
+              "channel": "task_updates"
+            }
+            
+      - think: 10
+      
+      - send:
+          payload: |
+            {
+              "type": "ping"
+            }
+            
+      - think: 5
+
+# Frontend performance testing
+  - name: "Frontend Performance"
+    weight: 10
+    flow:
+      - get:
+          url: "{{ frontend_base }}/"
+          expect:
+            - statusCode: 200
+            
+      - get:
+          url: "{{ frontend_base }}/login"
+          expect:
+            - statusCode: 200
+            
+      - get:
+          url: "{{ frontend_base }}/dashboard"
+          expect:
+            - statusCode: [200, 302]  # 302 if redirected to login
+            
+      - get:
+          url: "{{ frontend_base }}/billing"
+          expect:
+            - statusCode: [200, 302]
+            
+      # Static asset loading test
+      - get:
+          url: "{{ frontend_base }}/_next/static/css/app.css"
+          expect:
+            - statusCode: [200, 404]  # 404 if asset doesn't exist
+            
+      - get:
+          url: "{{ frontend_base }}/_next/static/js/app.js"
+          expect:
+            - statusCode: [200, 404]
+
+# Error handling and edge cases
+  - name: "Error Scenarios"
+    weight: 5
+    flow:
+      # Test invalid authentication
+      - post:
+          url: "{{ api_base }}/auth/login"
+          headers:
+            Content-Type: "application/json"
+          json:
+            email: "invalid@example.com"
+            password: "wrongpassword"
+          expect:
+            - statusCode: 401
+            
+      # Test unauthorized access
+      - get:
+          url: "{{ api_base }}/tasks"
+          headers:
+            Authorization: "Bearer invalid_token"
+          expect:
+            - statusCode: 401
+            
+      # Test invalid task creation
+      - post:
+          url: "{{ api_base }}/auth/login"
+          headers:
+            Content-Type: "application/json"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.access_token"
+              as: "access_token"
+          expect:
+            - statusCode: 200
+            
+      - post:
+          url: "{{ api_base }}/tasks"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+            Content-Type: "application/json"
+          json:
+            name: ""  # Invalid empty name
+            url: "not-a-valid-url"  # Invalid URL
+          expect:
+            - statusCode: 422  # Validation error
+            
+      # Test non-existent resources
+      - get:
+          url: "{{ api_base }}/tasks/99999999"
+          headers:
+            Authorization: "Bearer {{ access_token }}"
+          expect:
+            - statusCode: 404
+
+# Performance benchmarks for specific operations
+before:
+  flow:
+    - log: "Starting Artillery performance tests for Selextract Cloud"
+    - log: "Target: {{ $target }}"
+    - log: "Frontend: {{ frontend_base }}"
+
+after:
+  flow:
+    - log: "Artillery performance tests completed"
+    - log: "Check metrics and reports for performance analysis"

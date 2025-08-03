@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Host
+Host: https://selextract.com
+
+# Sitemaps
+Sitemap: https://selextract.com/sitemap.xml

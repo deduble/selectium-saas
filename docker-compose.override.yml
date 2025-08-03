@@ -1,0 +1,24 @@
+services:
+  selextract-api:
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api:/app
+    environment:
+      - DEV_MODE=true
+
+  selextract-worker:
+    volumes:
+      - ./worker:/app
+
+  selextract-frontend:
+    ports:
+      - "3000:3000"
+
+  selextract-postgres:
+    ports:
+      - "5432:5432"
+
+  selextract-redis:
+    ports:
+      - "6379:6379"

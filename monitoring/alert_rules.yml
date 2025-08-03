@@ -1,0 +1,247 @@
+groups:
+  - name: selextract_alerts
+    rules:
+      # System alerts
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes"
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 10 minutes"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is below 10%"
+
+      # Application alerts
+      - alert: APIHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API high latency"
+          description: "95th percentile latency is above 2 seconds"
+
+      - alert: TaskFailureRateHigh
+        expr: rate(celery_task_failed_total[10m]) / rate(celery_task_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High task failure rate"
+          description: "Task failure rate is above 10% in the last 10 minutes"
+
+      - alert: CeleryQueueBacklog
+        expr: celery_queue_length > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery queue backlog"
+          description: "Celery queue has more than 100 pending tasks"
+
+      - alert: PostgreSQLDown
+        expr: up{job="postgres-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database is not responding"
+
+      - alert: RedisDown
+        expr: up{job="redis-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache is not responding"
+
+      - alert: APIDown
+        expr: up{job="api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API is down"
+          description: "Main API service is not responding"
+
+      # Business logic alerts
+      - alert: LowComputeUnitsRemaining
+        expr: selextract_user_compute_units_remaining < 10
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "User running low on compute units"
+          description: "User {{ $labels.user_id }} has less than 10 compute units remaining"
+
+      - alert: ProxyFailureRateHigh
+        expr: rate(selextract_proxy_failures_total[10m]) / rate(selextract_proxy_requests_total[10m]) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High proxy failure rate"
+          description: "Proxy failure rate is above 30%"
+
+      # Database specific alerts
+      - alert: PostgreSQLTooManyConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL too many connections"
+          description: "PostgreSQL is using more than 80% of max connections"
+
+      - alert: PostgreSQLSlowQueries
+        expr: rate(pg_stat_statements_mean_time[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL slow queries detected"
+          description: "Average query time is above 1 second"
+
+      # Redis specific alerts
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis is using more than 90% of allocated memory"
+
+      - alert: RedisRejectedConnections
+        expr: rate(redis_rejected_connections_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis rejecting connections"
+          description: "Redis is rejecting connections due to maxclient limit"
+
+      # Nginx specific alerts
+      - alert: NginxHighRequestRate
+        expr: rate(nginx_http_requests_total[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Nginx high request rate"
+          description: "Nginx is handling more than 1000 requests per second"
+
+      - alert: NginxHighErrorRate
+        expr: rate(nginx_http_requests_total{status=~"5.."}[5m]) / rate(nginx_http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Nginx high error rate"
+          description: "Nginx 5xx error rate is above 5%"
+
+      # Celery worker specific alerts
+      - alert: CeleryWorkersDown
+        expr: celery_workers_active == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No Celery workers active"
+          description: "All Celery workers are down"
+
+      - alert: CeleryWorkerMemoryLeak
+        expr: celery_worker_memory_usage > 2000000000  # 2GB
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery worker memory leak detected"
+          description: "Celery worker {{ $labels.worker }} is using more than 2GB memory"
+
+      # Task execution specific alerts
+      - alert: TaskExecutionTimeHigh
+        expr: histogram_quantile(0.95, rate(celery_task_runtime_seconds_bucket[10m])) > 1800  # 30 minutes
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Long running tasks detected"
+          description: "95th percentile task execution time is above 30 minutes"
+
+      - alert: TaskTimeoutRate
+        expr: rate(celery_task_timeout_total[10m]) / rate(celery_task_total[10m]) > 0.02
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High task timeout rate"
+          description: "Task timeout rate is above 2%"
+
+      # File system alerts
+      - alert: HighInodeUsage
+        expr: (node_filesystem_files - node_filesystem_files_free) / node_filesystem_files > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High inode usage"
+          description: "Filesystem inode usage is above 90%"
+
+      - alert: DiskIOHigh
+        expr: rate(node_disk_io_time_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk I/O"
+          description: "Disk I/O utilization is above 80%"
+
+      # Network alerts
+      - alert: NetworkErrors
+        expr: rate(node_network_receive_errs_total[5m]) + rate(node_network_transmit_errs_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Network errors detected"
+          description: "Network interface errors are above 10 per second"
+
+      # Security alerts
+      - alert: TooManyFailedLogins
+        expr: rate(selextract_failed_login_attempts_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many failed login attempts"
+          description: "Failed login attempts rate is above 10 per second"
+
+      - alert: RateLimitViolations
+        expr: rate(selextract_rate_limit_violations_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate limit violations"
+          description: "Rate limit violations are above 100 per second"

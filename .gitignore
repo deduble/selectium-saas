@@ -1,0 +1,112 @@
+# Environment files
+.env
+.env.dev
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Build directories
+build/
+dist/
+.next/
+.nuxt/
+
+# Docker
+*.tar
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.db
+celerybeat.pid
+*.celerybeat-schedule
+
+# Redis dump files
+dump.rdb
+
+# Frontend build artifacts
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Python virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytest
+.pytest_cache/
+.coverage
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Local development overrides
+docker-compose.override.local.yml
+
+# Secrets and credentials (examples are OK)
+client_secret_*.json
+!*example*
+
+# Project-specific ignores
+logs/
+worker/logs/
+frontend/nul
+frontend/ERROR
+frontend/CACHED
+frontend/[selextract-frontend
+frontend/267
+frontend/selextract-frontend@1.0.0

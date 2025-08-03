@@ -1,0 +1,21 @@
+email,password,task_name,task_url
+loadtest1@example.com,LoadTest123!,E-commerce Product Scraping,https://example-shop.com/products/laptop
+loadtest2@example.com,LoadTest123!,News Article Extraction,https://example-news.com/article/breaking-news
+loadtest3@example.com,LoadTest123!,Real Estate Listings,https://example-realty.com/property/123
+loadtest4@example.com,LoadTest123!,Job Postings Scraper,https://example-jobs.com/job/software-engineer
+loadtest5@example.com,LoadTest123!,Social Media Posts,https://example-social.com/user/testuser/posts
+loadtest6@example.com,LoadTest123!,Restaurant Menu Scraping,https://example-restaurant.com/menu
+loadtest7@example.com,LoadTest123!,Sports Results Extraction,https://example-sports.com/scores/today
+loadtest8@example.com,LoadTest123!,Weather Data Collection,https://example-weather.com/forecast/newyork
+loadtest9@example.com,LoadTest123!,Stock Price Monitoring,https://example-finance.com/stock/AAPL
+loadtest10@example.com,LoadTest123!,Flight Price Tracking,https://example-travel.com/flights/NYC-LAX
+loadtest11@example.com,LoadTest123!,Book Price Comparison,https://example-books.com/search/python-programming
+loadtest12@example.com,LoadTest123!,Car Listing Scraper,https://example-cars.com/search/used-sedan
+loadtest13@example.com,LoadTest123!,Movie Reviews Collection,https://example-movies.com/reviews/latest-blockbuster
+loadtest14@example.com,LoadTest123!,Product Review Analysis,https://example-reviews.com/product/wireless-headphones
+loadtest15@example.com,LoadTest123!,Event Listing Scraper,https://example-events.com/search/concerts-nyc
+loadtest16@example.com,LoadTest123!,Academic Paper Search,https://example-academic.com/papers/machine-learning
+loadtest17@example.com,LoadTest123!,Course Information Scraper,https://example-education.com/courses/data-science
+loadtest18@example.com,LoadTest123!,Government Data Portal,https://example-gov.com/data/population-statistics
+loadtest19@example.com,LoadTest123!,Legal Document Search,https://example-legal.com/cases/recent-decisions
+loadtest20@example.com,LoadTest123!,Healthcare Provider Search,https://example-health.com/doctors/cardiologist

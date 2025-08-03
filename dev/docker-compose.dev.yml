@@ -1,0 +1,82 @@
+# Infrastructure-only development containers
+# Expert Recommendation: Bind ports to localhost only for security
+networks:
+  selextract-dev:
+    driver: bridge
+
+volumes:
+  dev_postgres_data:
+  dev_redis_data:
+
+services:
+  selextract-postgres-dev:
+    image: postgres:14-alpine
+    container_name: selextract-postgres-dev  # Expert: Explicit container name
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DEV_DB_NAME:-selextract_dev}
+      POSTGRES_USER: ${DEV_DB_USER:-selextract}
+      POSTGRES_PASSWORD: ${DEV_DB_PASSWORD:-devpassword}
+    ports:
+      - "127.0.0.1:${DEV_DB_PORT:-5432}:5432"  # Expert: Bind to localhost only
+    volumes:
+      - dev_postgres_data:/var/lib/postgresql/data
+      - ../db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - selextract-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DEV_DB_USER:-selextract}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  selextract-redis-dev:
+    image: redis:7-alpine
+    container_name: selextract-redis-dev  # Expert: Explicit container name
+    restart: unless-stopped
+    command: redis-server --requirepass ${DEV_REDIS_PASSWORD:-devpassword}
+    ports:
+      - "127.0.0.1:${DEV_REDIS_PORT:-6379}:6379"  # Expert: Bind to localhost only
+    volumes:
+      - dev_redis_data:/data
+    networks:
+      - selextract-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${DEV_REDIS_PASSWORD:-devpassword}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  selextract-worker-dev:
+    build:
+      context: ../worker
+    container_name: selextract-worker-dev
+    restart: unless-stopped
+    depends_on:
+      selextract-postgres-dev:
+        condition: service_healthy
+      selextract-redis-dev:
+        condition: service_healthy
+    environment:
+      # Worker uses container hostnames for internal communication
+      - SELEXTRACT_DB_HOST=selextract-postgres-dev
+      - SELEXTRACT_DB_PORT=5432
+      - SELEXTRACT_DB_NAME=${DEV_DB_NAME:-selextract_dev}
+      - SELEXTRACT_DB_USER=${DEV_DB_USER:-selextract}
+      - SELEXTRACT_DB_PASSWORD=${DEV_DB_PASSWORD:-devpassword}
+      - SELEXTRACT_REDIS_HOST=selextract-redis-dev
+      - SELEXTRACT_REDIS_PORT=6379
+      - SELEXTRACT_REDIS_PASSWORD=${DEV_REDIS_PASSWORD:-devpassword}
+      - SELEXTRACT_ENVIRONMENT=development
+      - SELEXTRACT_DEBUG=true
+      - SELEXTRACT_WEBSHARE_API_KEY=${SELEXTRACT_WEBSHARE_API_KEY:-}
+      # Override DATABASE_URL for container-to-container communication
+      - DATABASE_URL=postgresql://selextract:devpassword@selextract-postgres-dev:5432/selextract_dev
+      - REDIS_URL=redis://:devpassword@selextract-redis-dev:6379/0
+    networks:
+      - selextract-dev
+    volumes:
+      - ../worker/results:/app/results
+      - ../worker/logs:/app/logs
+    # Note: Worker gets its env vars from environment section above, not .env.dev
+    # .env.dev is for native API only (localhost connections)

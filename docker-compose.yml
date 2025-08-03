@@ -1,0 +1,277 @@
+networks:
+  selextract-internal:
+    driver: bridge
+  selextract-external:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  selextract-postgres:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      # Standardized environment variables with legacy fallback
+      - POSTGRES_DB=${SELEXTRACT_DB_NAME:-${POSTGRES_DB}}
+      - POSTGRES_USER=${SELEXTRACT_DB_USER:-${POSTGRES_USER}}
+      - POSTGRES_PASSWORD=${SELEXTRACT_DB_PASSWORD:-${POSTGRES_PASSWORD}}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - selextract-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SELEXTRACT_DB_USER:-${POSTGRES_USER}} -d ${SELEXTRACT_DB_NAME:-${POSTGRES_DB}}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 16G
+
+  selextract-redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --requirepass ${SELEXTRACT_REDIS_PASSWORD:-${REDIS_PASSWORD}}
+    volumes:
+      - redis_data:/data
+    networks:
+      - selextract-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  selextract-api:
+    build:
+      context: ./api
+    restart: always
+    depends_on:
+      - selextract-postgres
+      - selextract-redis
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/tmp
+      - /app/logs
+    environment:
+      # Standardized environment variables
+      - SELEXTRACT_ENVIRONMENT=${SELEXTRACT_ENVIRONMENT:-${ENVIRONMENT}}
+      - SELEXTRACT_DEBUG=${SELEXTRACT_DEBUG:-${DEBUG}}
+      - SELEXTRACT_LOG_LEVEL=${SELEXTRACT_LOG_LEVEL:-INFO}
+      - SELEXTRACT_JWT_SECRET_KEY=${SELEXTRACT_JWT_SECRET_KEY:-${JWT_SECRET_KEY}}
+      - SELEXTRACT_JWT_ALGORITHM=${SELEXTRACT_JWT_ALGORITHM:-${JWT_ALGORITHM}}
+      - SELEXTRACT_ACCESS_TOKEN_EXPIRE_MINUTES=${SELEXTRACT_ACCESS_TOKEN_EXPIRE_MINUTES:-${ACCESS_TOKEN_EXPIRE_MINUTES}}
+      - SELEXTRACT_API_SECRET_KEY=${SELEXTRACT_API_SECRET_KEY:-${SECRET_KEY}}
+      - SELEXTRACT_DB_HOST=${SELEXTRACT_DB_HOST:-selextract-postgres}
+      - SELEXTRACT_DB_PORT=${SELEXTRACT_DB_PORT:-5432}
+      - SELEXTRACT_DB_NAME=${SELEXTRACT_DB_NAME:-${POSTGRES_DB}}
+      - SELEXTRACT_DB_USER=${SELEXTRACT_DB_USER:-${POSTGRES_USER}}
+      - SELEXTRACT_DB_PASSWORD=${SELEXTRACT_DB_PASSWORD:-${POSTGRES_PASSWORD}}
+      - SELEXTRACT_REDIS_HOST=${SELEXTRACT_REDIS_HOST:-selextract-redis}
+      - SELEXTRACT_REDIS_PORT=${SELEXTRACT_REDIS_PORT:-6379}
+      - SELEXTRACT_REDIS_PASSWORD=${SELEXTRACT_REDIS_PASSWORD:-${REDIS_PASSWORD}}
+      - SELEXTRACT_REDIS_DB=${SELEXTRACT_REDIS_DB:-0}
+      - SELEXTRACT_GOOGLE_CLIENT_ID=${SELEXTRACT_GOOGLE_CLIENT_ID:-${GOOGLE_CLIENT_ID}}
+      - SELEXTRACT_GOOGLE_CLIENT_SECRET=${SELEXTRACT_GOOGLE_CLIENT_SECRET:-${GOOGLE_CLIENT_SECRET}}
+      - SELEXTRACT_GOOGLE_REDIRECT_URI=${SELEXTRACT_GOOGLE_REDIRECT_URI:-${GOOGLE_REDIRECT_URI}}
+      - SELEXTRACT_GITHUB_CLIENT_ID=${SELEXTRACT_GITHUB_CLIENT_ID:-${GITHUB_CLIENT_ID}}
+      - SELEXTRACT_GITHUB_CLIENT_SECRET=${SELEXTRACT_GITHUB_CLIENT_SECRET:-${GITHUB_CLIENT_SECRET}}
+      - SELEXTRACT_WEBSHARE_API_KEY=${SELEXTRACT_WEBSHARE_API_KEY:-${WEBSHARE_API_KEY}}
+      - SELEXTRACT_LEMONSQUEEZY_API_KEY=${SELEXTRACT_LEMONSQUEEZY_API_KEY:-${LEMON_SQUEEZY_API_KEY}}
+      - SELEXTRACT_LEMONSQUEEZY_STORE_ID=${SELEXTRACT_LEMONSQUEEZY_STORE_ID:-${LEMON_SQUEEZY_STORE_ID}}
+      - SELEXTRACT_LEMONSQUEEZY_WEBHOOK_SECRET=${SELEXTRACT_LEMONSQUEEZY_WEBHOOK_SECRET:-${LEMON_SQUEEZY_WEBHOOK_SECRET}}
+      - SELEXTRACT_LEMONSQUEEZY_BASE_URL=${SELEXTRACT_LEMONSQUEEZY_BASE_URL:-${LEMON_SQUEEZY_BASE_URL}}
+      - SELEXTRACT_LEMONSQUEEZY_WEBHOOK_URL=${SELEXTRACT_LEMONSQUEEZY_WEBHOOK_URL:-${LEMON_SQUEEZY_WEBHOOK_URL}}
+      - SELEXTRACT_LEMONSQUEEZY_STARTER_VARIANT_ID=${SELEXTRACT_LEMONSQUEEZY_STARTER_VARIANT_ID:-${LEMON_SQUEEZY_STARTER_VARIANT_ID}}
+      - SELEXTRACT_LEMONSQUEEZY_PROFESSIONAL_VARIANT_ID=${SELEXTRACT_LEMONSQUEEZY_PROFESSIONAL_VARIANT_ID:-${LEMON_SQUEEZY_PROFESSIONAL_VARIANT_ID}}
+      - SELEXTRACT_LEMONSQUEEZY_ENTERPRISE_VARIANT_ID=${SELEXTRACT_LEMONSQUEEZY_ENTERPRISE_VARIANT_ID:-${LEMON_SQUEEZY_ENTERPRISE_VARIANT_ID}}
+      - SELEXTRACT_API_URL=${SELEXTRACT_API_URL:-${API_URL}}
+      - SELEXTRACT_FRONTEND_URL=${SELEXTRACT_FRONTEND_URL:-${FRONTEND_URL}}
+      - SELEXTRACT_ALLOWED_ORIGINS=${SELEXTRACT_ALLOWED_ORIGINS:-${ALLOWED_ORIGINS}}
+      # Legacy environment variables (for backward compatibility)
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_HOST=${REDIS_HOST:-selextract-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - SECRET_KEY=${SECRET_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - WEBSHARE_API_KEY=${WEBSHARE_API_KEY}
+      - LEMON_SQUEEZY_API_KEY=${LEMON_SQUEEZY_API_KEY}
+      - LEMON_SQUEEZY_STORE_ID=${LEMON_SQUEEZY_STORE_ID}
+      - LEMON_SQUEEZY_WEBHOOK_SECRET=${LEMON_SQUEEZY_WEBHOOK_SECRET}
+      - LEMON_SQUEEZY_BASE_URL=${LEMON_SQUEEZY_BASE_URL}
+      - LEMON_SQUEEZY_WEBHOOK_URL=${LEMON_SQUEEZY_WEBHOOK_URL}
+      - LEMON_SQUEEZY_STARTER_VARIANT_ID=${LEMON_SQUEEZY_STARTER_VARIANT_ID}
+      - LEMON_SQUEEZY_PROFESSIONAL_VARIANT_ID=${LEMON_SQUEEZY_PROFESSIONAL_VARIANT_ID}
+      - LEMON_SQUEEZY_ENTERPRISE_VARIANT_ID=${LEMON_SQUEEZY_ENTERPRISE_VARIANT_ID}
+      - DEBUG=${DEBUG}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - API_URL=${API_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
+    networks:
+      - selextract-internal
+      - selextract-external
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+
+  selextract-worker:
+    build:
+      context: ./worker
+    restart: always
+    depends_on:
+      - selextract-postgres
+      - selextract-redis
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # Standardized environment variables
+      - SELEXTRACT_ENVIRONMENT=${SELEXTRACT_ENVIRONMENT:-${ENVIRONMENT}}
+      - SELEXTRACT_DEBUG=${SELEXTRACT_DEBUG:-${DEBUG}}
+      - SELEXTRACT_LOG_LEVEL=${SELEXTRACT_LOG_LEVEL:-INFO}
+      - SELEXTRACT_DB_HOST=${SELEXTRACT_DB_HOST:-selextract-postgres}
+      - SELEXTRACT_DB_PORT=${SELEXTRACT_DB_PORT:-5432}
+      - SELEXTRACT_DB_NAME=${SELEXTRACT_DB_NAME:-${POSTGRES_DB}}
+      - SELEXTRACT_DB_USER=${SELEXTRACT_DB_USER:-${POSTGRES_USER}}
+      - SELEXTRACT_DB_PASSWORD=${SELEXTRACT_DB_PASSWORD:-${POSTGRES_PASSWORD}}
+      - SELEXTRACT_REDIS_HOST=${SELEXTRACT_REDIS_HOST:-selextract-redis}
+      - SELEXTRACT_REDIS_PORT=${SELEXTRACT_REDIS_PORT:-6379}
+      - SELEXTRACT_REDIS_PASSWORD=${SELEXTRACT_REDIS_PASSWORD:-${REDIS_PASSWORD}}
+      - SELEXTRACT_REDIS_DB=${SELEXTRACT_REDIS_DB:-0}
+      - SELEXTRACT_WEBSHARE_API_KEY=${SELEXTRACT_WEBSHARE_API_KEY:-${WEBSHARE_API_KEY}}
+      # Legacy environment variables (for backward compatibility)
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_HOST=${REDIS_HOST:-selextract-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - WEBSHARE_API_KEY=${WEBSHARE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      # Celery configuration
+      - CELERY_CONCURRENCY=2
+      - CELERY_MAX_TASKS_PER_CHILD=100
+      - CELERY_TIME_LIMIT=3600
+      - CELERY_SOFT_TIME_LIMIT=3300
+      # System configuration
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      - PYTHONPATH=/app
+    networks:
+      - selextract-internal
+    volumes:
+      - ./worker/results:/app/results
+      - ./worker/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python3", "/app/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 4
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  selextract-frontend:
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+        - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${SELEXTRACT_GOOGLE_CLIENT_ID:-${NEXT_PUBLIC_GOOGLE_CLIENT_ID}}
+        - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/tmp
+      - /app/.next/cache
+    environment:
+      # Frontend-specific environment variables
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${SELEXTRACT_GOOGLE_CLIENT_ID:-${NEXT_PUBLIC_GOOGLE_CLIENT_ID}}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    networks:
+      - selextract-external
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  selextract-nginx:
+    image: nginx:1.23-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/sites-available:/etc/nginx/sites-available:ro
+      - ./nginx/sites-enabled:/etc/nginx/sites-enabled:ro
+    depends_on:
+      - selextract-api
+      - selextract-frontend
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/tmp
+      - /var/cache/nginx
+      - /var/run
+    networks:
+      - selextract-external
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
