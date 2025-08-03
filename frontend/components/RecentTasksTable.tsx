@@ -47,10 +47,20 @@ interface ClickableTableRowProps {
 
 const ClickableTableRow: React.FC<ClickableTableRowProps> = ({ task, onRowClick, children }) => {
   const handleRowClick = (e: React.MouseEvent) => {
-    // Prevent navigation if clicking on interactive elements
-    if ((e.target as HTMLElement).closest('button, a, [role="button"]')) {
+    const target = e.target as HTMLElement;
+    
+    // Prevent navigation if clicking on interactive elements (but not the row itself)
+    const interactiveElement = target.closest('button, a');
+    if (interactiveElement && interactiveElement !== e.currentTarget) {
       return;
     }
+    
+    // Also check for elements with role="button" that are not the row itself
+    const buttonRoleElement = target.closest('[role="button"]');
+    if (buttonRoleElement && buttonRoleElement !== e.currentTarget) {
+      return;
+    }
+    
     onRowClick(task.id);
   };
 
